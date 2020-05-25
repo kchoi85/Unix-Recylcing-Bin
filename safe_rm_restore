@@ -1,0 +1,65 @@
+#!/bin/bash
+
+# Created by: kihoon.choi@fdmgroup.com
+# Due date: 05-14-2020
+# Module: UNIX
+
+
+# Assign a variable with $1 to grab first command line argument
+# grab file_inode
+fileInode=$(cat $HOME/.restore.info | grep -w ^$1)
+
+# get directory path (get ride of file_inode:)
+pathDirName=$(echo -n $fileInode | cut -d":" -f2)
+
+#return parent directory's path
+dirName=$(dirname $pathDirName)
+deletedFile=$1
+# Recycling bin variable for restoreFile()
+garb=$HOME/deleted
+
+
+# Main error: If filename not provided, display error
+if [ $# -eq 0 ] ;
+        then
+                echo "Error: filename not provided. Example: safe_rm_restore f1_1234"
+                exit
+fi
+
+
+restoreFile() {
+	# if the directory does not exist, mkdir
+	if [ ! -d $dirName ] ;
+	then
+		mkdir $dirName
+	fi
+
+	# And move the file to the created directory
+	mv -f $garb/$deletedFile $pathDirName
+	
+	# grab $1 of restore info and save as temp, and rename to .restore.info
+	grep -v $fileInode $HOME/.restore.info > $HOME/.temp
+	mv $HOME/.temp $HOME/.restore.info
+}
+
+# Phase 2 Q 4
+# If file is non existent in the bin -> error
+
+if [ ! $fileInode ] ;
+then
+	echo "Error: file does not exist"
+# phase 2 Q 5
+else
+	if [ -e $pathDirName ] ;
+	then
+		echo "File already exists, do you want to overwrite?"
+		read -p "(yes/no)" input
+		
+		#Call yesno function
+		yesNo
+
+	else
+		restoreFile
+	fi
+fi
+	

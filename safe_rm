@@ -1,0 +1,252 @@
+#!/bin/bash
+
+# Submitted by: kihoon.choi@fdmgroup.com
+# Due date: May 14, 2020
+# Module: UNIX
+
+# Main variables, set to default false
+# 1) noArg = no argument inut
+# 2) oprI = -i as in interactive
+# 3) oprV = -v as in verbose
+# 4) oprR = -r for removing directories
+noArg=true
+oprI=false
+oprV=false
+oprR=false
+
+# argument operations -i -v -r
+# set to true if called into argument
+while getopts ivr opr
+        do
+                case $opr in
+                        i) oprI=true
+			   noArg=false	;;
+                        v) oprV=true
+			   noArg=false	;;
+                        r) oprR=true ;;
+                esac
+        done
+	shift $(($OPTIND - 1))
+
+# yesNo function for user input to call fileInodeDir() function
+# note to self: fileInodeDir() would be phase1 (6) 
+yesNo() {
+	case $input in
+		yes) fileInodeDir ;;
+		no) continue ;;
+		*) echo "Invalid argument, canceled"
+		   exit 1 ;;
+	esac	
+}
+
+# If $HOME/deleted does not exist (recycling bin), then create
+if [ ! -d $HOME/deleted ] ;
+	then
+	echo "Recycling Bin does not exist. Do you want to create it?"
+	echo -n "(yes/no): "
+
+	read answer
+  	if [ $answer = "yes" ] ; 
+	then
+		echo "Recylcing bin created at $HOME/deleted"
+    		mkdir $HOME/deleted
+		touch $HOME/.restore.info
+	elif [ $answer = "no" ] ; 
+	then
+		echo "Inputed no... recycle bin creation canceled"
+		exit 1
+  	else
+    		echo "Invalid argument, canceled"
+    		exit 1	
+	fi
+# If $Home/deleted does exist, but $Home/.restore.info does not exist
+elif [ -d $HOME/deleted ] && [ ! -e $HOME/.restore.info ] ; 
+then
+	touch $HOME/.restore.info
+fi
+
+# fileInodeDir
+# filename_inode:/home/trainee/f1
+fileInodeDir() {
+        inodeName=$(ls -i $all | cut -d " " -f1)
+	fileName=$(basename $all)
+        fullName=$fileName\_$inodeName
+	filePath=$(readlink -fn $all)
+        echo $fullName:$filePath >> $HOME/.restore.info
+        mv $all $HOME/deleted/$fullName
+}
+
+# Operations function for -i -v (-r requires recursion and directory & file separation)
+operations() {
+	# possibilites: no argument, -iv together, -v only, -i only
+	# basically call fileInodeDir() function if yes is the input
+
+	# no argument
+        if [ $noArg = true ] ; 
+	then
+		fileInodeDir
+
+	# -iv together	
+    	elif [ $oprV = true ] && [ $oprI = true ] ; 
+	then
+        	if [ -s $all ] ; 
+		then
+	    		echo "safe_rm '$all': remove empty file to bin?"
+            		read -p "(yes/no): " input
+        	else
+            		echo "safe_rm '$all': remove regular file to bin?" 
+	    		read -p "(yes/no): " input
+        	fi
+	
+		# call yesNo function for inputs
+        	yesNo
+
+		# verbose
+        	echo "process finished... '$all' removed to bin"
+
+   	# -v only
+    	elif [ $oprV = true ] ; 
+	then
+		fileInodeDir
+        	echo "process finished... '$all' removed to bin"
+
+    	# -i only
+    	elif [ $oprI = true ] ; 
+	then
+        	if [ -s $file ] ; 
+		then
+	    		echo "safe_rm '$all': remove empty file to bin?"
+            		read -p "(yes/no): " input
+        	else
+            		echo "safe_rm '$all': remove regular file to bin?" 
+	    		read -p "(yes/no): " input
+        	fi
+        	yesNo
+	fi	
+}
+
+# something is terribly wrong with this
+dirToBin() {
+        pwdPath=$(echo $allDirectories | cut -d " " -f1)
+        if [ $noArg = true ] ; 
+	then
+                rm -r $pwdPath
+        elif [ $oprI = true ] && [ $oprV = true ] ; 
+	then
+                rm -ivr $pwdPath
+        elif [ $oprV = true  ] ; 
+	then
+                rm -vr $pwdPath
+        elif [ $oprI = true ] ; 
+	then
+                rm -ir $pwdPath
+        fi
+}
+
+# recycling directories with -r (must separate dictories from files) 
+# thinking: 
+# Create function that separates directories and files using for loop at $*
+# if directory, call another function that can delete directories using noArg, -iv, -i, -v
+# if file, call operations()
+
+# This is an inner for loop bringing in $dirFiles
+seperateDir() {
+	for directory in $*
+	do
+		if [ -d $directory ] ; 
+		then
+			continue
+		else
+			# which is file
+			seperatedFiles $directory
+		fi
+	done
+
+	#now we have a list of directories
+	allDirectories=$(find $dirFiles -type d)
+
+	for directory in $allDirectories
+	do
+		if [ -d $directory ] ; 
+		then
+			dirToBin
+		else
+			continue
+		fi
+	done
+}
+
+seperatedFiles() {
+        for directory in $*
+        do
+                all=$directory
+                if [ -d $all ] ;
+                then
+                        seperateDir $directory
+                else
+                        operations
+                fi
+        done
+
+}
+
+
+# Error conditions: (1) no filename provided in argument, (2) file does not exist, (3) directory provided in argument
+
+        # (1) Using safe_rm command without filename in argument
+        if [ $# -eq 0 ] ; 
+	then
+                echo "Error: filename not provided - Example: safe_rm file1"
+                exit
+        fi
+
+
+        # errors() function: these errors are possible if and only if
+        # rm_safe is used without directory in the query
+
+        # (2) Using safe_rm command with non-existent file
+        errors() {
+                for all in $*
+                do
+                        if [ ! -e $all ] ; 
+			then
+                                echo "Error: $all: No such file or directory"
+                                exit
+                        fi
+
+        # (3) directory provided
+                        if [ -d $all ] ; 
+			then
+                                echo "Cannot remove '$all':it's directory. Try rm_safe -r directory"
+                                exit
+                        fi
+
+                #call operations function
+                operations
+                done
+        }
+
+# Operations function for -r (directory)
+# thinking:
+# when -r is specifically used...
+# use for loop to find directories/file (contents), store in a variable
+# and send to seperateDir() function
+
+if [ $oprR = true ] ; 
+	then
+        for i in $*
+        do
+		dirFiles=$i
+                if [ -d $dirFiles ] || [ -e $dirFiles ] ; 
+		then
+                        allDirectories=$(find $dirFiles)
+                        seperateDir $allDirectories
+                else
+                        echo "safe_rm -r '$dirFiles': cannot find"
+                fi
+        done
+else
+        # if not used -r
+        errors $*
+fi
+
