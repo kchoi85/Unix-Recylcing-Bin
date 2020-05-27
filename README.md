@@ -7,7 +7,7 @@
 safe_rm file_to_delete
 ```
 
-## safe_rm -ivr options
+## --interactive --verbose --recursive Options for safe_rm
 ```bash
 safe_rm -ivr directory/directory2/file_to_delete
 ```
